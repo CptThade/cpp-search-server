@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 #include <optional>
+#include <numeric>
 
 using namespace std;
 
@@ -92,7 +93,7 @@ public:
 		: stop_words_(MakeUniqueNonEmptyStrings(stop_words)) {
 		for (const string& word : stop_words_) {
 			if (!IsValidWord(word)) {
-				throw invalid_argument("word contains invalid characters"s);
+				throw invalid_argument("word contains invalid characters: "s + word);
 			}
 		}
 	}
@@ -102,8 +103,11 @@ public:
 	}
 
 	void AddDocument(int document_id, const string& document, DocumentStatus status, const vector<int>& ratings) {
-		if ((document_id < 0) || (documents_.count(document_id) > 0)) {
-			throw invalid_argument("invalid document_id"s);
+		if (document_id < 0) {
+			throw invalid_argument("invalid document_id: "s + to_string(document_id));
+		}
+		else if (documents_.count(document_id) > 0) {
+			throw invalid_argument("documents contain document with document_id: "s + to_string(document_id));
 		}
 		vector<string> words;
 		if (!SplitIntoWordsNoStop(document, words)) {
@@ -127,7 +131,8 @@ public:
 		auto matched_documents = FindAllDocuments(query, document_predicate);
 
 		sort(matched_documents.begin(), matched_documents.end(), [](const Document& lhs, const Document& rhs) {
-			if (abs(lhs.relevance - rhs.relevance) < 1e-6) {
+			const double err_rate = 1e-6;
+			if (abs(lhs.relevance - rhs.relevance) < err_rate) {
 				return lhs.rating > rhs.rating;
 			}
 			else {
@@ -138,7 +143,6 @@ public:
 			matched_documents.resize(MAX_RESULT_DOCUMENT_COUNT);
 		}
 
-		// Exchange matched_documents and result instead of deep copying  
 		return matched_documents;
 	}
 
@@ -161,10 +165,9 @@ public:
 
 	int GetDocumentId(int index) const {
 		if (index >= 0 && index < GetDocumentCount()) {
-			return document_ids_[index];
+			return document_ids_.at(index);
 		}
 		throw out_of_range("index out of range"s);
-		return INVALID_DOCUMENT_ID;
 	}
 
 	tuple<vector<string>, DocumentStatus> MatchDocument(const string& raw_query, int document_id) const {
@@ -234,10 +237,7 @@ private:
 		if (ratings.empty()) {
 			return 0;
 		}
-		int rating_sum = 0;
-		for (const int rating : ratings) {
-			rating_sum += rating;
-		}
+		int rating_sum = accumulate(ratings.begin(), ratings.end(), 0);
 		return rating_sum / static_cast<int>(ratings.size());
 	}
 
@@ -248,7 +248,6 @@ private:
 	};
 
 	[[nodiscard]] bool ParseQueryWord(string text, QueryWord& result) const {
-		// Empty result by initializing it with default constructed QueryWord
 		result = {};
 
 		if (text.empty()) {
@@ -273,7 +272,6 @@ private:
 	};
 
 	[[nodiscard]] bool ParseQuery(const string& text, Query& result) const {
-		// Empty result by initializing it with default constructed Query
 		result = {};
 		for (const string& word : SplitIntoWords(text)) {
 			QueryWord query_word;
